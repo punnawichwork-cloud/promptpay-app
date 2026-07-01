@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>สร้างคิวอาร์โค้ดรับเงิน</title>
+    <!-- Tailwind CSS สำหรับการจัดรูปแบบ -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js สำหรับวาดภาพ QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Phosphor Icons สำหรับไอคอนสวยๆ -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f0fdf4; /* โทนสีเขียวอ่อน สื่อถึงการเงิน/โชคลาภ */
+            color: #1f2937;
+        }
+
+        /* ซ่อนลูกศรขึ้นลงในช่อง input number */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        
+        /* สไตล์สำหรับปุ่ม Toggle ระหว่างหน้าหลักและหน้าตั้งค่า */
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .tab-active {
+            color: #166534;
+            border-bottom: 2px solid #166534;
+            font-weight: 600;
+        }
+        .tab-inactive {
+            color: #6b7280;
+            border-bottom: 2px solid transparent;
+        }
+        
+        /* Animation การสลับหน้า */
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(10px);
+            animation: fadeIn 0.3s forwards;
+        }
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start sm:justify-center p-4 pt-8">
+
+    <div class="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100">
+        
+        <!-- Header & Tabs -->
+        <div class="px-6 pt-6 pb-2 border-b border-gray-100">
+            <h1 class="text-2xl font-bold text-center text-green-800 mb-4 flex justify-center items-center gap-2">
+                <i class="ph ph-qr-code text-3xl"></i>
+                รับเงินพร้อมเพย์
+            </h1>
+            
+            <div class="flex justify-between w-full">
+                <button id="tabMain" onclick="switchTab('main')" class="tab-btn tab-active w-1/2 py-2 text-center text-sm focus:outline-none flex justify-center items-center gap-1">
+                    <i class="ph ph-coins"></i> สร้าง QR
+                </button>
+                <button id="tabSettings" onclick="switchTab('settings')" class="tab-btn tab-inactive w-1/2 py-2 text-center text-sm focus:outline-none flex justify-center items-center gap-1">
+                    <i class="ph ph-gear"></i> ตั้งค่าบัญชี
+                </button>
+            </div>
+        </div>
+
+        <!-- =======================
+             หน้าจอ 1: หน้าหลัก (สร้าง QR)
+             ======================= -->
+        <div id="viewMain" class="p-6 fade-enter">
+            
+            <!-- แจ้งเตือนเมื่อยังไม่ได้ตั้งค่าบัญชี -->
+            <div id="alertNoAccount" class="hidden mb-6 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl text-sm flex items-start gap-3">
+                <i class="ph-fill ph-warning-circle text-xl mt-0.5"></i>
+                <div>
+                    <p class="font-medium">ยังไม่ได้ตั้งค่าบัญชี</p>
+                    <p class="mt-1">กรุณาไปที่เมนู <button onclick="switchTab('settings')" class="underline font-semibold">ตั้งค่าบัญชี</button> ก่อนสร้าง QR Code</p>
+                </div>
+            </div>
+
+            <!-- กล่องแสดงบัญชีที่บันทึกไว้ -->
+            <div id="activeAccountCard" class="hidden mb-6 bg-green-50 border border-green-100 p-4 rounded-2xl flex items-center gap-3">
+                <div class="bg-white p-2 rounded-full shadow-sm text-green-600">
+                    <i class="ph ph-bank text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500 mb-0.5">รับเงินเข้าบัญชี</p>
+                    <p id="displayAccountName" class="font-semibold text-gray-800 text-sm">-</p>
+                    <p id="displayAccountNo" class="text-xs text-gray-500 font-mono">-</p>
+                </div>
+            </div>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">จำนวนเงิน (บาท)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-500 font-medium text-lg">฿</span>
+                        <input type="number" id="amount" placeholder="0.00" step="0.01" min="0.01"
+                               class="w-full pl-10 pr-4 py-4 bg-gray-50 rounded-xl border border-gray-200 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-lg font-semibold text-gray-800 placeholder-gray-400">
+                    </div>
+                    <p id="errorAmount" class="text-red-500 text-xs mt-2 hidden flex items-center gap-1"><i class="ph ph-x-circle"></i> กรุณาระบุจำนวนเงิน</p>
+                </div>
+
+                <button id="btnGenerate" onclick="generateQR()" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-4 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(22,101,52,0.39)] active:scale-[0.98] flex justify-center items-center gap-2">
+                    <i class="ph ph-qr-code text-xl"></i> สร้าง QR รับเงิน
+                </button>
+            </div>
+
+            <!-- พื้นที่แสดง QR Code -->
+            <div id="qrResult" class="hidden mt-8 flex flex-col items-center">
+                <div class="w-full border-t border-dashed border-gray-300 mb-6 relative">
+                    <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-white px-3 text-xs text-gray-400">เลื่อนลงเพื่อดู QR</div>
+                </div>
+                
+                <div id="qrcode" class="p-4 bg-white border-2 border-gray-100 rounded-2xl shadow-sm"></div>
+                
+                <div class="mt-5 text-center bg-gray-50 w-full py-4 rounded-xl border border-gray-100">
+                    <p class="text-gray-500 text-sm">ยอดชำระ</p>
+                    <p id="resultAmount" class="text-green-700 font-bold text-3xl mt-1 tracking-tight"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- =======================
+             หน้าจอ 2: หน้าตั้งค่า (บันทึกบัญชี)
+             ======================= -->
+        <div id="viewSettings" class="p-6 hidden">
+            
+            <div class="mb-5">
+                <h2 class="text-lg font-semibold text-gray-800">ข้อมูลผู้รับเงิน</h2>
+                <p class="text-xs text-gray-500">ข้อมูลนี้จะถูกบันทึกไว้ในเครื่องของคุณเท่านั้น</p>
+            </div>
+
+            <div class="space-y-4">
+                <!-- ชื่อบัญชี -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อบัญชี / ร้านค้า (ใส่หรือไม่ก็ได้)</label>
+                    <input type="text" id="settingName" placeholder="เช่น ร้านป้าแจ๋ว, หรือชื่อ-นามสกุล" 
+                           class="w-full px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm">
+                </div>
+
+                <!-- หมายเลขพร้อมเพย์ -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">หมายเลขพร้อมเพย์ <span class="text-red-500">*</span></label>
+                    <input type="text" id="settingPromptpay" placeholder="เบอร์โทร 10 หลัก หรือ บัตร ปชช 13 หลัก" 
+                           class="w-full px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 focus:bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm font-mono tracking-wide"
+                           maxlength="13"
+                           oninput="this.value = this.value.replace(/[^0-9]/g, '')"> <!-- บังคับพิมพ์ได้แค่ตัวเลข -->
+                    <p id="errorSettingId" class="text-red-500 text-xs mt-2 hidden flex items-center gap-1"><i class="ph ph-x-circle"></i> กรุณากรอกเบอร์โทร (10 หลัก) หรือ บัตร ปชช (13 หลัก)</p>
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="saveSettings()" 
+                            class="w-full bg-gray-800 hover:bg-gray-900 text-white font-medium py-3.5 rounded-xl transition-all shadow-md active:scale-[0.98] flex justify-center items-center gap-2">
+                        <i class="ph ph-floppy-disk text-lg"></i> บันทึกข้อมูล
+                    </button>
+                </div>
+
+                <!-- ข้อความยืนยันการบันทึก -->
+                <div id="saveSuccess" class="hidden mt-2 bg-green-50 text-green-700 p-3 rounded-lg text-sm text-center border border-green-200 flex items-center justify-center gap-2">
+                    <i class="ph-fill ph-check-circle text-lg"></i> บันทึกข้อมูลเรียบร้อยแล้ว
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. ระบบจัดการ State และ LocalStorage
+        // ==========================================
+        
+        // โหลดข้อมูลเมื่อเปิดหน้าเว็บ
+        window.onload = function() {
+            loadSettings();
+            
+            // เพิ่ม Event Listener ให้ช่องจำนวนเงิน เมื่อกด Enter ให้สร้าง QR เลย
+            document.getElementById('amount').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    generateQR();
+                }
+            });
+        };
+
+        function loadSettings() {
+            // ดึงข้อมูลจาก LocalStorage ของเบราว์เซอร์
+            const savedId = localStorage.getItem('promptpay_id');
+            const savedName = localStorage.getItem('promptpay_name');
+
+            const alertNoAccount = document.getElementById('alertNoAccount');
+            const activeAccountCard = document.getElementById('activeAccountCard');
+            const btnGenerate = document.getElementById('btnGenerate');
+
+            if (savedId) {
+                // ถ้ามีข้อมูลบันทึกไว้
+                alertNoAccount.classList.add('hidden');
+                activeAccountCard.classList.remove('hidden');
+                
+                // กรอกข้อมูลลงหน้า Settings ให้ด้วย
+                document.getElementById('settingPromptpay').value = savedId;
+                document.getElementById('settingName').value = savedName || '';
+
+                // แสดงข้อมูลบนหน้าหลัก
+                document.getElementById('displayAccountNo').innerText = formatIdDisplay(savedId);
+                document.getElementById('displayAccountName').innerText = savedName || 'ไม่ได้ระบุชื่อบัญชี';
+                
+                btnGenerate.disabled = false;
+                btnGenerate.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                // ถ้ายังไม่มีข้อมูล
+                alertNoAccount.classList.remove('hidden');
+                activeAccountCard.classList.add('hidden');
+                
+                // ปิดปุ่มสร้าง QR
+                btnGenerate.disabled = true;
+                btnGenerate.classList.add('opacity-50', 'cursor-not-allowed');
+                
+                // ถ้าเพิ่งเปิดแอปครั้งแรกและไม่มีข้อมูล ให้เด้งไปหน้าตั้งค่าเลย
+                switchTab('settings');
+            }
+        }
+
+        function saveSettings() {
+            const idInput = document.getElementById('settingPromptpay').value;
+            const nameInput = document.getElementById('settingName').value;
+            const errorSettingId = document.getElementById('errorSettingId');
+            const saveSuccess = document.getElementById('saveSuccess');
+
+            errorSettingId.classList.add('hidden');
+            saveSuccess.classList.add('hidden');
+
+            // ตรวจสอบความถูกต้อง (ต้องเป็น 10 หรือ 13 หลัก)
+            if (idInput.length !== 10 && idInput.length !== 13) {
+                errorSettingId.classList.remove('hidden');
+                return;
+            }
+
+            // บันทึกลง LocalStorage
+            localStorage.setItem('promptpay_id', idInput);
+            localStorage.setItem('promptpay_name', nameInput);
+
+            // แสดงข้อความสำเร็จ
+            saveSuccess.classList.remove('hidden');
+            
+            // โหลดข้อมูลใหม่เพื่ออัปเดตหน้าหลัก
+            loadSettings();
+
+            // ซ่อนข้อความสำเร็จหลังจาก 2 วินาที และสลับกลับไปหน้าหลัก
+            setTimeout(() => {
+                saveSuccess.classList.add('hidden');
+                switchTab('main');
+            }, 1500);
+        }
+
+        // ==========================================
+        // 2. ระบบ UI (สลับหน้าจอ)
+        // ==========================================
+        function switchTab(tabName) {
+            const tabMain = document.getElementById('tabMain');
+            const tabSettings = document.getElementById('tabSettings');
+            const viewMain = document.getElementById('viewMain');
+            const viewSettings = document.getElementById('viewSettings');
+
+            if (tabName === 'main') {
+                tabMain.className = "tab-btn tab-active w-1/2 py-3 text-center text-sm focus:outline-none flex justify-center items-center gap-1";
+                tabSettings.className = "tab-btn tab-inactive w-1/2 py-3 text-center text-sm focus:outline-none flex justify-center items-center gap-1";
+                
+                viewMain.classList.remove('hidden');
+                viewMain.classList.add('fade-enter');
+                viewSettings.classList.add('hidden');
+            } else {
+                tabSettings.className = "tab-btn tab-active w-1/2 py-3 text-center text-sm focus:outline-none flex justify-center items-center gap-1";
+                tabMain.className = "tab-btn tab-inactive w-1/2 py-3 text-center text-sm focus:outline-none flex justify-center items-center gap-1";
+                
+                viewSettings.classList.remove('hidden');
+                viewSettings.classList.add('fade-enter');
+                viewMain.classList.add('hidden');
+                
+                // รีเซ็ตข้อความผลลัพธ์การบันทึก
+                document.getElementById('saveSuccess').classList.add('hidden');
+                document.getElementById('errorSettingId').classList.add('hidden');
+            }
+        }
+
+        // ตกแต่งรูปแบบการแสดงเบอร์/บัตร ปชช. ให้ดูง่ายขึ้น (เช่น 081-234-5678)
+        function formatIdDisplay(id) {
+            if (id.length === 10) {
+                return id.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+            } else if (id.length === 13) {
+                return id.replace(/(\d{1})(\d{4})(\d{5})(\d{2})(\d{1})/, '$1-$2-$3-$4-$5');
+            }
+            return id;
+        }
+
+        // ==========================================
+        // 3. ระบบคำนวณและสร้าง PromptPay QR
+        // ==========================================
+        
+        function crc16(data) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < data.length; i++) {
+                crc ^= data.charCodeAt(i) << 8;
+                for (let j = 0; j < 8; j++) {
+                    if ((crc & 0x8000) > 0) {
+                        crc = (crc << 1) ^ 0x1021;
+                    } else {
+                        crc = crc << 1;
+                    }
+                }
+            }
+            return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        // ฟังก์ชันจัดรูปแบบหมายเลขให้ตรงตามมาตรฐาน EMVCo
+        function formatPromptPayForPayload(id) {
+            let target = '';
+            if (id.length === 13) {
+                target = '0213' + id;
+            } else if (id.length === 10) {
+                target = '01130066' + id.substring(1);
+            } else {
+                return null;
+            }
+            return target;
+        }
+
+        function buildPayload(promptPayId, amount) {
+            const formattedId = formatPromptPayForPayload(promptPayId);
+            if (!formattedId) return null;
+
+            const aid = '0016A000000677010111'; 
+            const merchantInfo = aid + formattedId;
+            const merchantLength = merchantInfo.length.toString().padStart(2, '0');
+
+            let payload = '000201' + // Payload Format Indicator
+                          '010212' + // Point of Initiation Method (12 = Dynamic)
+                          '29' + merchantLength + merchantInfo + // Merchant Info
+                          '5802TH' + // Country
+                          '5303764'; // Currency
+
+            // ใส่จำนวนเงิน (ถ้ามี)
+            if (amount && amount > 0) {
+                const amountStr = amount.toFixed(2);
+                const amountLength = amountStr.length.toString().padStart(2, '0');
+                payload += '54' + amountLength + amountStr;
+            }
+
+            payload += '6304';
+            payload += crc16(payload);
+
+            return payload;
+        }
+
+        function generateQR() {
+            // ดึง ID จาก LocalStorage (ไม่ใช่ช่อง input แล้ว)
+            const promptPayId = localStorage.getItem('promptpay_id');
+            const rawAmount = document.getElementById('amount').value;
+            
+            const errorAmount = document.getElementById('errorAmount');
+            const qrResult = document.getElementById('qrResult');
+            const qrcodeDiv = document.getElementById('qrcode');
+            
+            // รีเซ็ต UI
+            errorAmount.classList.add('hidden');
+            qrResult.classList.add('hidden');
+            
+            // เช็คว่ามี ID จริงๆ
+            if (!promptPayId) {
+                alert("กรุณาตั้งค่าหมายเลขพร้อมเพย์ก่อน");
+                switchTab('settings');
+                return;
+            }
+
+            const amount = parseFloat(rawAmount);
+            if (isNaN(amount) || amount <= 0) {
+                errorAmount.classList.remove('hidden');
+                document.getElementById('amount').focus();
+                return;
+            }
+
+            // สร้าง Payload
+            const payload = buildPayload(promptPayId, amount);
+            
+            if (payload) {
+                // ล้างรูปเก่า
+                qrcodeDiv.innerHTML = '';
+                
+                // วาด QR Code ใหม่
+                new QRCode(qrcodeDiv, {
+                    text: payload,
+                    width: 240, // ขยายให้ใหญ่ขึ้นนิดหน่อย สแกนง่ายขึ้น
+                    height: 240,
+                    colorDark : "#064e3b", // สีเขียวเข้มเข้ากับธีม
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M // ระดับ M เหมาะสมกับการแสดงโลโก้ตรงกลางหรือลดข้อผิดพลาด
+                });
+
+                // แสดงตัวเลขยอดเงิน
+                document.getElementById('resultAmount').innerText = '฿ ' + amount.toLocaleString('th-TH', {minimumFractionDigits: 2});
+                
+                // เปิดกล่องผลลัพธ์แบบมี Animation
+                qrResult.classList.remove('hidden');
+                qrResult.classList.add('fade-enter');
+                
+                // เลื่อนหน้าจอลงมาให้เห็น QR Code ชัดเจน (สำคัญสำหรับมือถือจอเล็ก)
+                setTimeout(() => {
+                    qrResult.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }, 100);
+            }
+        }
+    </script>
+</body>
+</html>
