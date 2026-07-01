@@ -1,0 +1,232 @@
+<!-- ... existing code ... -->
+                <!-- เพิ่มส่วนกรอกข้อมูลรถลูกค้า -->
+                <div class="p-4 border-b border-gray-100 bg-white space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">ทะเบียนรถ (จำเป็น)</label>
+                        <input type="text" id="car-plate" placeholder="เช่น กค 1234 กทม" class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm uppercase">
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">ยี่ห้อ</label>
+                            <select id="car-brand" onchange="updateCarModels()" class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white cursor-pointer">
+                                <option value="">-- เลือกยี่ห้อ --</option>
+                                <!-- ตัวเลือกจะถูกสร้างด้วย JavaScript -->
+                            </select>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-xs font-medium text-gray-500">รุ่นรถ</label>
+                                <span id="car-size-badge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Size M</span>
+                            </div>
+                            <select id="car-model" onchange="updateCarSize()" class="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 cursor-pointer" disabled>
+                                <option value="">-- เลือกรุ่น --</option>
+                                <!-- ตัวเลือกจะอัปเดตตามยี่ห้อที่เลือก -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- รายการในตะกร้า -->
+<!-- ... existing code ... -->
+    <!-- Script ควบคุมระบบทั้งหมด -->
+    <script>
+        // --- ฐานข้อมูลยี่ห้อ รุ่นรถ และ ไซส์ ---
+        // S = รถเก๋งเล็ก/Eco Car, M = รถเก๋งกลาง/C-Segment, L = รถเก๋งใหญ่/SUVเล็ก, XL = รถกระบะ/PPV
+        const carData = {
+            "Toyota": [
+                { name: "Yaris", size: "S" }, { name: "Vios", size: "S" }, 
+                { name: "Corolla Altis", size: "M" }, { name: "Corolla Cross", size: "L" }, 
+                { name: "Camry", size: "L" }, { name: "Fortuner", size: "XL" }, { name: "Hilux Revo", size: "XL" }
+            ],
+            "Honda": [
+                { name: "Brio", size: "S" }, { name: "City", size: "S" }, { name: "Jazz", size: "S" },
+                { name: "Civic", size: "M" }, { name: "HR-V", size: "L" }, 
+                { name: "CR-V", size: "L" }, { name: "Accord", size: "L" }
+            ],
+            "Isuzu": [
+                { name: "D-Max", size: "XL" }, { name: "MU-X", size: "XL" }
+            ],
+            "Mitsubishi": [
+                { name: "Attrage", size: "S" }, { name: "Mirage", size: "S" },
+                { name: "Xpander", size: "L" }, { name: "Triton", size: "XL" }, { name: "Pajero Sport", size: "XL" }
+            ],
+            "Nissan": [
+                { name: "March", size: "S" }, { name: "Almera", size: "S" }, { name: "Kicks", size: "M" }, 
+                { name: "Terra", size: "XL" }, { name: "Navara", size: "XL" }
+            ],
+            "Mazda": [
+                { name: "Mazda2", size: "S" }, { name: "Mazda3", size: "M" }, 
+                { name: "CX-3", size: "M" }, { name: "CX-30", size: "L" }, { name: "CX-5", size: "L" }
+            ],
+            "Ford": [
+                { name: "Ranger", size: "XL" }, { name: "Everest", size: "XL" }
+            ],
+            "MG": [
+                { name: "MG3", size: "S" }, { name: "MG5", size: "M" }, 
+                { name: "MG ZS", size: "L" }, { name: "MG EP", size: "L" }
+            ],
+            "BYD": [
+                { name: "Dolphin", size: "S" }, { name: "Atto 3", size: "L" }, { name: "Seal", size: "L" }
+            ]
+        };
+
+        // --- ข้อมูลจำลอง สินค้า/บริการ ---
+        // ปรับปรุง: ล้างรถจะเช็คราคาจาก size ของรถแทน
+        const menuItems = [
+            { 
+                id: 'wash', 
+                name: 'ล้างสี + ดูดฝุ่น', 
+                isSizeDependent: true, // บอกระบบว่าเมนูนี้ต้องคิดราคาตามไซส์รถ
+                prices: { "S": 150, "M": 180, "L": 200, "XL": 250 },
+                icon: 'ph-car', 
+                color: 'bg-blue-50 text-blue-600 border-blue-200' 
+            },
+            { id: 'c1', name: 'เคลือบสี (Wax)', price: 300, isSizeDependent: false, icon: 'ph-sparkle', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+            { id: 'c2', name: 'อบโอโซน', price: 200, isSizeDependent: false, icon: 'ph-wind', color: 'bg-teal-50 text-teal-600 border-teal-200' },
+            { id: 'd1', name: 'ซักเบาะ/พรม', price: 600, isSizeDependent: false, icon: 'ph-armchair', color: 'bg-orange-50 text-orange-600 border-orange-200' },
+            { id: 'd2', name: 'ล้างห้องเครื่อง', price: 400, isSizeDependent: false, icon: 'ph-engine', color: 'bg-orange-50 text-orange-600 border-orange-200' }
+        ];
+
+        // --- State ของระบบ ---
+        let cart = [];
+        let settings = { promptPayId: '', name: '' };
+        let salesHistory = [];
+        let currentCarSize = ''; // เก็บไซส์รถที่กำลังเลือกล่าสุด
+<!-- ... existing code ... -->
+        function renderMenu() {
+            const grid = document.getElementById('menu-grid');
+            grid.innerHTML = menuItems.map(item => {
+                // ถ้าเมนูขึ้นอยู่กับขนาดรถ ให้แสดงราคาเริ่มต้น หรือคำว่า "ราคาตามไซส์รถ"
+                const priceDisplay = item.isSizeDependent ? '฿150 - ฿250' : `฿${item.price}`;
+                return `
+                <div onclick="addToCart('${item.id}')" class="cursor-pointer border-2 ${item.color.replace('text', 'border').split(' ')[2] || 'border-transparent'} bg-white hover:border-blue-400 p-4 rounded-2xl shadow-sm transition-all transform active:scale-95 flex flex-col items-center text-center">
+                    <div class="w-14 h-14 rounded-full ${item.color} flex items-center justify-center mb-3">
+                        <i class="ph ${item.icon} text-3xl"></i>
+                    </div>
+                    <h3 class="font-medium text-sm text-gray-700 leading-tight mb-2">${item.name}</h3>
+                    <p class="font-bold text-blue-600 mt-auto text-xs sm:text-sm">${priceDisplay}</p>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // --- ระบบตะกร้าสินค้า ---
+        function addToCart(itemId) {
+            const itemTemplate = menuItems.find(i => i.id === itemId);
+            if (!itemTemplate) return;
+
+            let finalPrice = itemTemplate.price;
+            let displayName = itemTemplate.name;
+
+            // ถ้ารายการนี้ต้องคิดราคาตามไซส์รถ
+            if (itemTemplate.isSizeDependent) {
+                if (!currentCarSize) {
+                    alert('กรุณาเลือกยี่ห้อและรุ่นรถก่อน เพื่อคำนวณราคาล้างรถให้ถูกต้องครับ');
+                    document.getElementById('car-brand').focus();
+                    return;
+                }
+                finalPrice = itemTemplate.prices[currentCarSize];
+                displayName = `${itemTemplate.name} (Size ${currentCarSize})`;
+            }
+
+            // เช็คว่ามีรายการชื่อเดียวกันในตะกร้าหรือยัง
+            const existingItemIndex = cart.findIndex(i => i.name === displayName);
+            if (existingItemIndex !== -1) {
+                cart[existingItemIndex].qty += 1;
+            } else {
+                // สร้าง object ใหม่ใส่ตะกร้า ป้องกันการอ้างอิงข้อมูลผิด
+                cart.push({ 
+                    id: itemId, 
+                    name: displayName, 
+                    price: finalPrice, 
+                    qty: 1 
+                });
+            }
+            renderCart();
+        }
+<!-- ... existing code ... -->
+        function clearCart() {
+            cart = [];
+            currentCarSize = ''; // เคลียร์ไซส์
+            
+            // ล้างข้อมูลรถด้วย
+            document.getElementById('car-plate').value = '';
+            document.getElementById('car-brand').value = '';
+            
+            // รีเซ็ต Dropdown รุ่นรถ
+            const modelSelect = document.getElementById('car-model');
+            modelSelect.innerHTML = '<option value="">-- เลือกรุ่น --</option>';
+            modelSelect.disabled = true;
+
+            // ซ่อน Badge
+            document.getElementById('car-size-badge').classList.add('hidden');
+            
+            renderCart();
+        }
+<!-- ... existing code ... -->
+        // --- ระบบควบคุม Dropdown รถยนต์ ---
+        function initCarDropdowns() {
+            const brandSelect = document.getElementById('car-brand');
+            Object.keys(carData).forEach(brand => {
+                const option = document.createElement('option');
+                option.value = brand;
+                option.textContent = brand;
+                brandSelect.appendChild(option);
+            });
+        }
+
+        function updateCarModels() {
+            const brandSelect = document.getElementById('car-brand');
+            const modelSelect = document.getElementById('car-model');
+            const badge = document.getElementById('car-size-badge');
+            const selectedBrand = brandSelect.value;
+
+            // เคลียร์รุ่นเก่าและไซส์เก่า
+            modelSelect.innerHTML = '<option value="">-- เลือกรุ่น --</option>';
+            currentCarSize = '';
+            badge.classList.add('hidden');
+
+            if (selectedBrand && carData[selectedBrand]) {
+                modelSelect.disabled = false;
+                carData[selectedBrand].forEach(car => {
+                    const option = document.createElement('option');
+                    option.value = car.name;
+                    option.textContent = car.name;
+                    // แอบเก็บค่าไซส์ไว้ใน attribute ของ option เผื่อใช้ตอน onchange
+                    option.setAttribute('data-size', car.size);
+                    modelSelect.appendChild(option);
+                });
+            } else {
+                modelSelect.disabled = true;
+            }
+        }
+
+        // ฟังก์ชันใหม่: อัปเดตไซส์เมื่อเลือกรุ่นรถ
+        function updateCarSize() {
+            const modelSelect = document.getElementById('car-model');
+            const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+            const badge = document.getElementById('car-size-badge');
+            
+            if (selectedOption.value !== "") {
+                currentCarSize = selectedOption.getAttribute('data-size');
+                
+                // แสดงป้ายบอกไซส์รถ
+                badge.textContent = `Size ${currentCarSize}`;
+                badge.classList.remove('hidden');
+
+                // เปลี่ยนสี Badge ตามไซส์
+                let badgeColor = 'bg-gray-100 text-gray-700';
+                if(currentCarSize === 'S') badgeColor = 'bg-green-100 text-green-700';
+                if(currentCarSize === 'M') badgeColor = 'bg-blue-100 text-blue-700';
+                if(currentCarSize === 'L') badgeColor = 'bg-purple-100 text-purple-700';
+                if(currentCarSize === 'XL') badgeColor = 'bg-orange-100 text-orange-700';
+                
+                badge.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor}`;
+            } else {
+                currentCarSize = '';
+                badge.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
